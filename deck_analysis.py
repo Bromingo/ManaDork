@@ -75,7 +75,7 @@ class MagicAnalysis(MagicDeck):
 
 if __name__ == '__main__':
     Deck = MagicDeck('decks/Atraxa', commander="Atraxa, Praetors' Voice")
-    analysis = MagicAnalysis('decks/Atraxa', commander="Atraxa, Praetors' Voice")
+    analysis = MagicAnalysis('decks/Atraxa', commander_list=["Atraxa, Praetors' Voice"])
     #print(analysis.run())
     print(Deck.drawable_deck.cards)
     import pdb
