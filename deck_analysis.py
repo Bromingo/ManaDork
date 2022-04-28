@@ -12,14 +12,26 @@ MANA_MAP = {
     'G': 'Green'
 }
 
-def load_card_list():
-    cards = json.load(open('AllCards.json'))
-    return cards
 
-class MagicAnalysis(object):
-    def load_deck_list(self, filename):
+def load_card_list():
+    with open("AtomicCards.json", "r", encoding='utf-8') as context:
+        cards = json.load(context)
+        card_list = cards['data']
+    return card_list
+
+
+class MagicDeck:
+    def __init__(self, filepath: str, type: str = 'text', commander: str = None):
+        self.filepath = filepath
+        self.type = type #default to text list
+        self.deck_list_raw = self.load_deck_list()
+        self.deck_list_details = self.pull_data_for_decklist()
+        self.commander = commander
+
+    def load_deck_list(self):
+        # TODO: make this read .cod files as well
         dl = []
-        with open(filename) as f:
+        with open(self.filepath) as f:
             for line in f:
                 temp_item = {}
                 cleaned_entry = line.rstrip()
@@ -34,19 +46,20 @@ class MagicAnalysis(object):
                     dl.append(temp_item)
         return dl
 
-    def pull_data_for_decklist(self, infile):
-        decklist = self.load_deck_list(infile)
+
+    def pull_data_for_decklist(self):
         card_list = load_card_list()
         processed_decklist = []
-        for entry in decklist:
+        for entry in self.deck_list_raw:
             try:
                 name = entry['card_name']
                 num_copies = entry['num_copies']
-                card_json = card_list[name]
-                mana_cost = card_json['manaCost']
+                card_json = card_list[name][0] # Get entry from list
+                mana_cost = card_json.get('manaCost', None) # Lands don't have a mana cost (nor do some spells)
                 cmc = card_json['convertedManaCost']
                 typeline = card_json['type']
                 types = card_json['types']
+                text = card_json['text']
                 sub_types = card_json['subtypes']
                 super_types = card_json['supertypes']
                 if 'Creature' in types:
@@ -62,6 +75,7 @@ class MagicAnalysis(object):
                     'cmc': cmc,
                     'typeline': typeline,
                     'types': types,
+                    'text': text,
                     'sub_types': sub_types,
                     'super_types': super_types,
                     'power': power,
@@ -69,10 +83,16 @@ class MagicAnalysis(object):
                 }
                 processed_decklist.append(card_dict)
             except:
+               print(card_json)
                logging.error('Error importing card {}'.format(entry['card_name']))
         return processed_decklist
 
-    def count_mana(self, decklist):
+
+class MagicAnalysis(MagicDeck):
+    def __init__(self, filepath: str, type: str = 'text', commander: str = None):
+        super().__init__(filepath, type, commander)
+
+    def count_mana(self):
         count_entry = {
             'total_symbols': 0,
             'total_cards_of_color': 0,
@@ -88,14 +108,14 @@ class MagicAnalysis(object):
             'Green': count_entry
         }
         return_list = []
-        for card in decklist:
+        for card in self.deck_list_details:
             card['mana_counts'] = self.count_card_mana(card)
             return_list.append(card)
         return return_list
 
     def count_card_mana(self, card):
         mana_string = card['mana_cost']
-        mana_symbols = [x for x in re.split('\{|\}', mana_string) if len(x)>0]
+        mana_symbols = [x for x in re.split('\{|\}', mana_string) if len(x) > 0]
         color_list = ['W', 'U', 'B', 'R', 'G']
         half_color_list = ['2/W', '2/U', '2/B', '2/R', '2/G']
         hybrid_list = ['W/U', 'U/B', 'B/R', 'R/G', 'G/W', 'W/B', 'U/R', 'B/G', 'R/W', 'G/U']
@@ -117,13 +137,8 @@ class MagicAnalysis(object):
         targetdict[key] = entry_dict
 
     def run(self):
-        infile = '''test_deck.txt'''
-
-        cleaned_list = self.pull_data_for_decklist(dl)
-        counted_mana = self.count_mana(cleaned_list)
-        summarize_mana = self.summarize_mana(counted_mana)
+        counted_mana = self.count_mana()
         p = pprint.PrettyPrinter(indent=4)
-        p.pprint(cleaned_list)
         p.pprint(counted_mana)
 
     def main_run(self):
@@ -134,4 +149,7 @@ class MagicAnalysis(object):
 
 
 if __name__ == '__main__':
-    MagicAnalysis().main_run()
+    Deck = MagicDeck('decks/Atraxa', commander="Atraxa, Praetors' Voice")
+    analysis = MagicAnalysis('decks/Atraxa', commander="Atraxa, Praetors' Voice")
+    #print(analysis.run())
+    # print(Deck.deck_list_details)
