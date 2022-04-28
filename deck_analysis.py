@@ -1,8 +1,9 @@
 import logging
-import json
+
 import re
 from scipy.stats import hypergeom
 import pprint
+from MagicEntities import MagicDeck
 
 MANA_MAP = {
     'W': 'White',
@@ -11,82 +12,6 @@ MANA_MAP = {
     'R': 'Red',
     'G': 'Green'
 }
-
-
-def load_card_list():
-    with open("AtomicCards.json", "r", encoding='utf-8') as context:
-        cards = json.load(context)
-        card_list = cards['data']
-    return card_list
-
-
-class MagicDeck:
-    def __init__(self, filepath: str, type: str = 'text', commander: str = None):
-        self.filepath = filepath
-        self.type = type #default to text list
-        self.deck_list_raw = self.load_deck_list()
-        self.deck_list_details = self.pull_data_for_decklist()
-        self.commander = commander
-
-    def load_deck_list(self):
-        # TODO: make this read .cod files as well
-        dl = []
-        with open(self.filepath) as f:
-            for line in f:
-                temp_item = {}
-                cleaned_entry = line.rstrip()
-                split_entry = cleaned_entry.split(' ')
-                if split_entry[0].isdigit() == True:
-                    temp_item['num_copies'] = int(split_entry[0])
-                    temp_item['card_name'] = " ".join(split_entry[1:])
-                else:
-                    temp_item['num_copies'] = 1
-                    temp_item['card_name'] = cleaned_entry
-                if len(temp_item['card_name']) > 0:
-                    dl.append(temp_item)
-        return dl
-
-
-    def pull_data_for_decklist(self):
-        card_list = load_card_list()
-        processed_decklist = []
-        for entry in self.deck_list_raw:
-            try:
-                name = entry['card_name']
-                num_copies = entry['num_copies']
-                card_json = card_list[name][0] # Get entry from list
-                mana_cost = card_json.get('manaCost', None) # Lands don't have a mana cost (nor do some spells)
-                cmc = card_json['convertedManaCost']
-                typeline = card_json['type']
-                types = card_json['types']
-                text = card_json['text']
-                sub_types = card_json['subtypes']
-                super_types = card_json['supertypes']
-                if 'Creature' in types:
-                    power = card_json['power']
-                    toughness = card_json['toughness']
-                else:
-                    power = None
-                    toughness = None
-                card_dict = {
-                    'name': name,
-                    'num_copies': num_copies,
-                    'mana_cost': mana_cost,
-                    'cmc': cmc,
-                    'typeline': typeline,
-                    'types': types,
-                    'text': text,
-                    'sub_types': sub_types,
-                    'super_types': super_types,
-                    'power': power,
-                    'toughness': toughness
-                }
-                processed_decklist.append(card_dict)
-            except:
-               print(card_json)
-               logging.error('Error importing card {}'.format(entry['card_name']))
-        return processed_decklist
-
 
 class MagicAnalysis(MagicDeck):
     def __init__(self, filepath: str, type: str = 'text', commander: str = None):
@@ -152,4 +77,6 @@ if __name__ == '__main__':
     Deck = MagicDeck('decks/Atraxa', commander="Atraxa, Praetors' Voice")
     analysis = MagicAnalysis('decks/Atraxa', commander="Atraxa, Praetors' Voice")
     #print(analysis.run())
-    # print(Deck.deck_list_details)
+    print(Deck.drawable_deck.cards)
+    import pdb
+    pdb.set_trace()
