@@ -14,8 +14,8 @@ MANA_MAP = {
 }
 
 class MagicAnalysis(MagicDeck):
-    def __init__(self, filepath: str, type: str = 'text', commander: str = None):
-        super().__init__(filepath, type, commander)
+    def __init__(self, filepath: str, type: str = 'text', commander_list: str = None):
+        super().__init__(filepath, type, commander_list)
 
     def count_mana(self):
         count_entry = {
@@ -74,8 +74,8 @@ class MagicAnalysis(MagicDeck):
 
 
 if __name__ == '__main__':
-    Deck = MagicDeck('decks/Atraxa', commander="Atraxa, Praetors' Voice")
-    analysis = MagicAnalysis('decks/Atraxa', commander_list=["Atraxa, Praetors' Voice"])
+    Deck = MagicDeck('decks/test', commander_list=["Atraxa, Praetors' Voice"])
+    # analysis = MagicAnalysis('decks/Atraxa', commander_list=["Atraxa, Praetors' Voice"])
     #print(analysis.run())
     print(Deck.drawable_deck.cards)
     import pdb

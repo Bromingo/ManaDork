@@ -1,7 +1,21 @@
 import json
 import random
 import logging
+import re
 
+from numpy import add
+
+COLOR_CODES = ['W','U','B','R','G', 'C']
+
+base_mana_produced = {
+            'W': 0,
+            'U': 0,
+            'B': 0,
+            'R': 0,
+            'G': 0,
+            'C': 0,
+            'A': 0 # Any
+        }
 
 def load_card_list():
     with open("AtomicCards.json", "r", encoding='utf-8') as context:
@@ -9,7 +23,7 @@ def load_card_list():
         card_list = cards['data']
     return card_list
 
-
+# TODO: Maybe create a "permanent" that has notions of tapped / untapped, damage marked, and summoning sickness?
 class MagicCard:
     def __init__(self, name, mana_cost, cmc, typeline, types, text, sub_types, super_types, power, toughness):
         self.name = name
@@ -22,10 +36,61 @@ class MagicCard:
         self.super_types = super_types
         self.power = power
         self.toughness = toughness
+        # TODO: Support Planeswalkers
+        # Derived
+        self.parsed_mana_cost = self.parse_mana_cost()
+        self.text_lines = self.text.lower().split('\n')
+        self.enters_tapped = self.check_enters_tapped()
+        self.is_permanent = self.check_is_permanent()
+        self.mana_production = self.mana_produced()
+        self.produces_mana = (self.mana_production != base_mana_produced)
+
+    def parse_mana_cost(self):
+        if self.mana_cost:
+            return self.mana_cost.rstrip('}').lstrip('{').split('}{')
+        else:
+            return None
+
+    def check_enters_tapped(self):
+        if 'Creature' in self.types:
+            return True
+
+    def check_is_permanent(self):
+        perm_list = ['Creature', 'Artifact', 'Enchantment', 'Planeswalker']
+        if any(item in perm_list for item in self.types):
+            return True
+
+    def mana_produced(self):
+        mana_strings = [
+            'add {W}',
+            'add {U}',
+            'add {B}',
+            'add {R}',
+            'add {G}',
+            'mana of any color',
+        ]
+        mana_produced = base_mana_produced.copy()
+        for line in self.text_lines:
+            add_split = line.split('add ')
+            if len(add_split) > 1:
+                # This won't be perfect, so we'll want a smarter way to template this
+                for after_add in add_split[1:]:
+                    for col in COLOR_CODES:
+                        color_code = '{'+col.lower()+'}'
+                        text_split_by_color = after_add.split(color_code)
+                        mana_produced[col] += len(text_split_by_color) - 1
+                    mana_produced['A'] += len(after_add.split('mana of any color')) - 1
+
+                # TODO: Make this max after each line, to prevent double counting something like 'Crystal Vein'
+        return mana_produced
+
+    def __repr__(self):
+        return f'|{self.name}|'
+                
 
 
 class CardGroup:
-    def __init__(self, cards: list):
+    def __init__(self, cards):
         self.cards = cards
 
     def shuffle(self):
@@ -34,7 +99,7 @@ class CardGroup:
     def find_cards_by_name(self, name: str):
         return [c for c in self.cards if c.name == name]
 
-    def move_card_list(self, list_of_cards: list, target_card_group):
+    def move_card_list(self, list_of_cards, target_card_group):
         for c in list_of_cards:
             self.move_card(card=c, target_card_group=target_card_group)
 
@@ -46,13 +111,13 @@ class CardGroup:
         if len(self.cards) > 0:
             popped_card = self.cards.pop(self.card_index(card))
             target_card_group.cards.append(popped_card)
-
+    
 
 class MagicDeck:
-    def __init__(self, filepath: str, type: str = 'text', commander: str = None):
+    def __init__(self, filepath: str, type: str = 'text', commander_list: str = None):
         self.filepath = filepath
         self.type = type  # default to text list
-        self.commander = commander
+        self.commander_list = commander_list
         initial_decklist = self.load_deck_list()
         self.deck_list_raw = initial_decklist
         self.deck_list_details = self.pull_data_for_decklist()
