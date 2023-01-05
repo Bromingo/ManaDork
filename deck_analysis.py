@@ -66,11 +66,22 @@ class MagicAnalysis(MagicDeck):
         p = pprint.PrettyPrinter(indent=4)
         p.pprint(counted_mana)
 
+    def get_mana_colors(card_text):
+        # Use a regular expression to find all of the mana symbols in the card's text
+        # that are associated with mana production
+        mana_regex = r'\b(add|produce|put)\b.+\{[WUBRG]\}'
+        matches = re.findall(mana_regex, card_text, re.IGNORECASE)
+
+        # Extract the mana symbols from the matches and return a list of the unique ones
+        mana_symbols = [re.search(r'\{[WUBRG]\}', match).group(0) for match in matches]
+        return list(set(mana_symbols))
+
     def main_run(self):
         try:
             self.run()
         except Exception as e:
             logging.error(e)
+
 
 
 if __name__ == '__main__':

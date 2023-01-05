@@ -1,12 +1,12 @@
 import json
 import random
 import logging
-import re
-
-from numpy import add
+import collections
+import pdb
 
 COLOR_CODES = ['W','U','B','R','G', 'C']
 
+# TODO: possibly just increment all when we get "add any"
 base_mana_produced = {
             'W': 0,
             'U': 0,
@@ -16,6 +16,17 @@ base_mana_produced = {
             'C': 0,
             'A': 0 # Any
         }
+
+
+
+
+class NoMatchingSourcesException(Exception):
+    def __init__(self, *args: object) -> None:
+        super().__init__(*args)
+
+class CardNotFoundException(Exception):
+    def __init__(self, *args: object) -> None:
+        super().__init__(*args)
 
 def load_card_list():
     with open("AtomicCards.json", "r", encoding='utf-8') as context:
@@ -44,6 +55,7 @@ class MagicCard:
         self.is_permanent = self.check_is_permanent()
         self.mana_production = self.mana_produced()
         self.produces_mana = (self.mana_production != base_mana_produced)
+        self.mana_score = self.mana_score()
 
     def parse_mana_cost(self):
         if self.mana_cost:
@@ -51,29 +63,52 @@ class MagicCard:
         else:
             return None
 
+    def get_mana_cost_dict(self):
+        parsed_mana = self.parsed_mana_cost
+        mana_dict = {
+            'generic': 0,
+            'mana_symbols': [],
+            'hybrid_symbols': []
+        }
+        for mana_symbol in parsed_mana:
+            if mana_symbol.isnumeric():
+                mana_dict['generic'] = int(mana_symbol)
+            elif '/' in mana_symbol:
+                [a,b] = mana_symbol.split('/')
+                if b == 'P': # Phyrexian
+                    mana_dict['mana_symbols'].append(a)
+                elif b.isnumeric(): #TODO: handle parsing of hybrid generic
+                    pass
+                else:
+                    mana_dict['hybrid_symbols'].append((a,b))
+            elif 'X' not in mana_symbol: # TODO: handle X
+                mana_dict['mana_symbols'].append(mana_symbol)
+        return mana_dict
+
+
+    def check_type(self, type_to_check):
+        if type_to_check in self.types:
+            return True
+        else:
+            return False
+
     def check_enters_tapped(self):
+        # TODO: check tapped in text box
         if 'Creature' in self.types:
             return True
 
     def check_is_permanent(self):
-        perm_list = ['Creature', 'Artifact', 'Enchantment', 'Planeswalker']
+        perm_list = ['Creature', 'Artifact', 'Enchantment', 'Planeswalker', 'Land']
         if any(item in perm_list for item in self.types):
             return True
 
     def mana_produced(self):
-        mana_strings = [
-            'add {W}',
-            'add {U}',
-            'add {B}',
-            'add {R}',
-            'add {G}',
-            'mana of any color',
-        ]
         mana_produced = base_mana_produced.copy()
         for line in self.text_lines:
             add_split = line.split('add ')
             if len(add_split) > 1:
                 # This won't be perfect, so we'll want a smarter way to template this
+                # TODO: make this more restrictive: do something like "{T}" add
                 for after_add in add_split[1:]:
                     for col in COLOR_CODES:
                         color_code = '{'+col.lower()+'}'
@@ -84,34 +119,84 @@ class MagicCard:
                 # TODO: Make this max after each line, to prevent double counting something like 'Crystal Vein'
         return mana_produced
 
+    def mana_score(self):
+        if self.mana_production['A'] > 0:
+            return 5
+        return len({key: value for key, value in self.mana_production.items() if value != 0 and key not in ['C','A']})
+
     def __repr__(self):
         return f'|{self.name}|'
-                
 
+    def __str__(self):
+        return f'|{self.name}|'
 
 class CardGroup:
-    def __init__(self, cards):
+    def __init__(self, cards=[]):
         self.cards = cards
 
     def shuffle(self):
-        self.cards = random.shuffle(self.cards)
+        random.shuffle(self.cards)
 
     def find_cards_by_name(self, name: str):
         return [c for c in self.cards if c.name == name]
+
+    def find_cards_by_type(self, filter_type):
+        return [c for c in self.cards if c.check_type(filter_type)]
+
+    def find_cards_exclude_type(self, exclude_type):
+        return [c for c in self.cards if not c.check_type(exclude_type)]
 
     def move_card_list(self, list_of_cards, target_card_group):
         for c in list_of_cards:
             self.move_card(card=c, target_card_group=target_card_group)
 
     def card_index(self, card):
-        return self.cards.index(card)
+        if card in self.cards:
+            return self.cards.index(card)
+        else:
+            raise CardNotFoundException
 
     def move_card(self, card, target_card_group):
         # Assumes you move to bottom, where order matters
         if len(self.cards) > 0:
             popped_card = self.cards.pop(self.card_index(card))
             target_card_group.cards.append(popped_card)
-    
+
+    def max_mana_across_sources(self):
+        mana_production_list = [card.mana_production for card in self.cards]
+        counter = collections.Counter()
+        for card in mana_production_list:
+            counter.update(card)
+        return dict(counter)
+
+    def lowest_score_matching_mana_source(self, mana_key):
+        matching_sources = [card for card in self.cards if card.mana_production[mana_key] > 0 or card.mana_production['A'] > 0]
+        if len(matching_sources) == 0:
+            raise NoMatchingSourcesException
+        else:
+            card = min(matching_sources, key=lambda x: x.mana_score)
+            return card
+
+    def lowest_score_mana_sources(self, generic_amount):
+        matching_sources = [card for card in self.cards if card.produces_mana]
+        if len(matching_sources) < generic_amount:
+            raise NoMatchingSourcesException
+        else:
+            sorted_sources = sorted(matching_sources, key=lambda x: x.mana_score)
+            return sorted_sources[:generic_amount]
+
+    @property
+    def length(self):
+        return len(self.cards)
+
+    def __len__(self):
+        return len(self.cards)
+
+    def __repr__(self) -> str:
+        return str(self.cards)
+
+    def __str__(self) -> str:
+        return str(self.cards)
 
 class MagicDeck:
     def __init__(self, filepath: str, type: str = 'text', commander_list: str = None):
